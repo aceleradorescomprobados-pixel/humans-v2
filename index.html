@@ -3,354 +3,364 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>HUMANS — Live Performance Coach</title>
-<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<title>HUMANS — Coach en Vivo v2</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <style>
   :root {
-    --black: #0a0a0a; --white: #f5f4f0; --gray: #1a1a1a; --gray2: #2a2a2a; --gray3: #444;
-    --muted: #888; --accent-pre: #00e5a0; --accent-live: #ff4d4d; --accent-post: #7b8cff;
+    --black: #0a0a0a; --white: #f5f4f0; --gray: #1a1a1a; --gray2: #242424;
+    --muted: #666; --green: #00e5a0; --red: #ff4d4d; --blue: #7b8cff;
     --mono: 'DM Mono', monospace; --display: 'Syne', sans-serif; --body: 'DM Sans', sans-serif;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  html, body { height: 100%; background: var(--black); color: var(--white); font-family: var(--body); }
-  .shell { display: flex; height: 100vh; overflow: hidden; }
-  .sidebar { width: 220px; flex-shrink: 0; background: var(--gray); border-right: 1px solid #222; display: flex; flex-direction: column; padding: 28px 0; }
-  .main { flex: 1; overflow-y: auto; }
-  .logo { padding: 0 24px 28px; border-bottom: 1px solid #222; }
-  .logo-mark { font-family: var(--display); font-size: 18px; font-weight: 800; letter-spacing: -0.5px; }
-  .logo-sub { font-family: var(--mono); font-size: 10px; color: var(--muted); letter-spacing: 0.12em; margin-top: 4px; }
-  .nav { padding: 20px 0; flex: 1; }
-  .nav-item { display: flex; align-items: center; gap: 10px; padding: 12px 24px; cursor: pointer; font-size: 13px; color: var(--muted); transition: all 0.15s; border-left: 2px solid transparent; }
-  .nav-item:hover { color: var(--white); background: rgba(255,255,255,0.03); }
-  .nav-item.active { color: var(--white); border-left-color: var(--nav-accent); background: rgba(255,255,255,0.05); }
-  .nav-item .dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
-  .nav-item .label { font-family: var(--mono); font-size: 10px; }
-  .nav-sep { height: 1px; background: #222; margin: 8px 24px; }
-  .panel { display: none; padding: 48px 56px; min-height: 100%; animation: fadeIn 0.3s ease; }
-  .panel.active { display: block; }
-  @keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
-  .panel-tag { font-family: var(--mono); font-size: 11px; letter-spacing: 0.1em; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
-  .panel-tag::before { content:''; display:block; width:20px; height:1px; background: currentColor; }
-  .panel-title { font-family: var(--display); font-size: 36px; font-weight: 700; line-height: 1.1; letter-spacing: -1px; margin-bottom: 10px; }
-  .panel-desc { font-size: 14px; color: var(--muted); line-height: 1.6; max-width: 520px; margin-bottom: 40px; }
-  .field-group { margin-bottom: 24px; }
-  .field-label { font-family: var(--mono); font-size: 11px; color: var(--muted); letter-spacing: 0.08em; margin-bottom: 8px; display: block; }
-  input[type=text], input[type=url], textarea {
-    width: 100%; background: var(--gray); border: 1px solid #333; border-radius: 8px;
-    color: var(--white); font-family: var(--body); font-size: 14px; padding: 12px 16px; transition: border-color 0.15s; outline: none;
+  html, body { background: var(--black); color: var(--white); font-family: var(--body); min-height: 100vh; }
+
+  .header { padding: 20px 32px; border-bottom: 1px solid #1e1e1e; display: flex; align-items: center; justify-content: space-between; }
+  .logo { font-family: var(--display); font-size: 16px; font-weight: 800; }
+  .logo span { color: var(--red); }
+  .badge { display: flex; align-items: center; gap: 6px; font-family: var(--mono); font-size: 11px; padding: 6px 14px; border-radius: 100px; }
+  .badge.on { background: rgba(255,77,77,0.12); color: var(--red); border: 1px solid rgba(255,77,77,0.25); }
+  .badge.off { background: var(--gray2); color: var(--muted); border: 1px solid #2a2a2a; }
+  .pulse { width: 6px; height: 6px; border-radius: 50%; background: var(--red); }
+  .badge.on .pulse { animation: pulse 1.2s ease-in-out infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+  .main { display: grid; grid-template-columns: 340px 1fr; gap: 0; height: calc(100vh - 61px); }
+
+  /* LEFT PANEL */
+  .left { border-right: 1px solid #1e1e1e; display: flex; flex-direction: column; overflow: hidden; }
+  .setup { padding: 20px; border-bottom: 1px solid #1e1e1e; }
+  .field-label { font-family: var(--mono); font-size: 10px; color: var(--muted); letter-spacing: 0.1em; margin-bottom: 6px; display: block; }
+  input[type=url], textarea {
+    width: 100%; background: var(--gray2); border: 1px solid #2a2a2a; border-radius: 6px;
+    color: var(--white); font-family: var(--body); font-size: 13px; padding: 10px 12px; outline: none; transition: border-color 0.15s;
   }
-  input:focus, textarea:focus { border-color: var(--accent); }
-  textarea { resize: vertical; min-height: 80px; }
-  input::placeholder, textarea::placeholder { color: #555; }
-  .url-row { display: flex; gap: 8px; margin-bottom: 8px; }
-  .url-row input { flex: 1; }
-  .icon-btn { width: 42px; height: 42px; background: var(--gray2); border: 1px solid #333; border-radius: 8px; cursor: pointer; color: var(--muted); font-size: 18px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: all 0.15s; }
-  .icon-btn:hover { color: var(--white); }
-  .add-url { background: none; border: 1px dashed #333; border-radius: 8px; padding: 10px 16px; width: 100%; cursor: pointer; color: var(--muted); font-size: 13px; font-family: var(--mono); transition: all 0.15s; margin-top: 4px; text-align: left; }
-  .add-url:hover { border-color: #555; color: var(--white); }
-  .btn-primary { padding: 15px 32px; border: none; border-radius: 8px; font-family: var(--display); font-size: 15px; font-weight: 700; cursor: pointer; transition: all 0.15s; letter-spacing: -0.2px; }
-  .btn-primary:hover { opacity: 0.88; transform: translateY(-1px); }
-  .btn-primary:disabled { opacity: 0.35; cursor: not-allowed; transform: none; }
-  .status-bar { margin-top: 20px; padding: 14px 18px; border-radius: 8px; font-size: 13px; display: none; }
-  .status-bar.loading { background: var(--gray2); color: var(--muted); display: flex; align-items: center; gap: 10px; }
-  .status-bar.error { background: rgba(255,77,77,0.1); border: 1px solid rgba(255,77,77,0.3); color: #ff7777; display: block; }
-  .spinner { width: 14px; height: 14px; border: 2px solid #444; border-top-color: var(--accent-pre); border-radius: 50%; animation: spin 0.7s linear infinite; flex-shrink: 0; }
-  @keyframes spin { to { transform: rotate(360deg); } }
-  .result-box { margin-top: 28px; display: none; }
-  .result-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
-  .result-label { font-family: var(--mono); font-size: 11px; color: var(--muted); letter-spacing: 0.08em; }
-  .copy-btn { font-family: var(--mono); font-size: 11px; color: var(--muted); background: var(--gray2); border: 1px solid #333; border-radius: 6px; padding: 6px 12px; cursor: pointer; transition: all 0.15s; }
-  .copy-btn:hover { color: var(--white); }
-  .result-content { background: var(--gray); border: 1px solid #2a2a2a; border-radius: 12px; padding: 28px; font-size: 14px; line-height: 1.85; color: #ccc; white-space: pre-wrap; word-break: break-word; max-height: 520px; overflow-y: auto; }
-  .live-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 28px; }
-  .live-card { background: var(--gray); border: 1px solid #2a2a2a; border-radius: 12px; padding: 20px; }
-  .live-card-label { font-family: var(--mono); font-size: 10px; color: var(--muted); letter-spacing: 0.1em; margin-bottom: 10px; }
-  .live-badge { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 100px; font-family: var(--mono); font-size: 11px; margin-bottom: 16px; }
-  .live-badge.on { background: rgba(255,77,77,0.15); color: var(--accent-live); border: 1px solid rgba(255,77,77,0.3); }
-  .live-badge.off { background: var(--gray2); color: var(--muted); border: 1px solid #333; }
-  .live-badge .pulse { width: 6px; height: 6px; border-radius: 50%; background: var(--accent-live); }
-  .live-badge.on .pulse { animation: livepulse 1.2s ease-in-out infinite; }
-  @keyframes livepulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.5;transform:scale(0.7)} }
-  .interval-row { display: flex; gap: 8px; margin-bottom: 16px; }
-  .interval-opt { flex: 1; padding: 10px; background: var(--gray2); border: 1px solid #333; border-radius: 8px; text-align: center; cursor: pointer; font-family: var(--mono); font-size: 12px; color: var(--muted); transition: all 0.15s; }
-  .interval-opt.selected { border-color: var(--accent-live); color: var(--white); }
-  .metrics-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; }
-  .metric-val { font-family: var(--display); font-size: 28px; font-weight: 700; }
-  .metric-lbl { font-family: var(--mono); font-size: 10px; color: var(--muted); margin-top: 4px; letter-spacing: 0.08em; }
-  .tip-stream { background: var(--gray); border: 1px solid #2a2a2a; border-radius: 12px; padding: 20px; min-height: 200px; max-height: 420px; overflow-y: auto; }
-  .tip-item { padding: 14px 0; border-bottom: 1px solid #222; }
+  input:focus, textarea:focus { border-color: #444; }
+  textarea { resize: none; min-height: 72px; margin-top: 12px; }
+  input::placeholder, textarea::placeholder { color: #444; }
+  .interval-row { display: flex; gap: 6px; margin: 12px 0; }
+  .int-opt { flex: 1; padding: 8px; background: var(--gray2); border: 1px solid #2a2a2a; border-radius: 6px; text-align: center; cursor: pointer; font-family: var(--mono); font-size: 11px; color: var(--muted); transition: all 0.15s; }
+  .int-opt.sel { border-color: var(--red); color: var(--white); }
+  .start-btn { width: 100%; padding: 12px; background: var(--red); color: var(--white); border: none; border-radius: 6px; font-family: var(--display); font-size: 14px; font-weight: 700; cursor: pointer; transition: all 0.15s; }
+  .start-btn:hover { opacity: 0.85; }
+  .start-btn.active { background: #333; color: var(--muted); }
+
+  /* METRICS */
+  .metrics { padding: 16px 20px; border-bottom: 1px solid #1e1e1e; display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .metric { background: var(--gray2); border-radius: 8px; padding: 12px; }
+  .metric-val { font-family: var(--display); font-size: 24px; font-weight: 800; line-height: 1; }
+  .metric-lbl { font-family: var(--mono); font-size: 9px; color: var(--muted); letter-spacing: 0.1em; margin-top: 4px; }
+  .metric-delta { font-family: var(--mono); font-size: 11px; margin-top: 4px; }
+  .up { color: var(--green); }
+  .down { color: var(--red); }
+
+  /* CHART */
+  .chart-wrap { padding: 16px 20px; border-bottom: 1px solid #1e1e1e; }
+  .chart-label { font-family: var(--mono); font-size: 10px; color: var(--muted); letter-spacing: 0.1em; margin-bottom: 10px; }
+  .chart-container { height: 120px; position: relative; }
+
+  /* TIPS STREAM */
+  .tips-wrap { flex: 1; overflow-y: auto; padding: 16px 20px; }
+  .tips-label { font-family: var(--mono); font-size: 10px; color: var(--muted); letter-spacing: 0.1em; margin-bottom: 12px; }
+  .tip-item { padding: 12px 0; border-bottom: 1px solid #1e1e1e; }
   .tip-item:last-child { border-bottom: none; }
-  .tip-time { font-family: var(--mono); font-size: 10px; color: var(--muted); margin-bottom: 6px; }
-  .tip-text { font-size: 14px; line-height: 1.6; color: var(--white); }
-  .tip-tag { display: inline-block; font-family: var(--mono); font-size: 10px; padding: 3px 8px; border-radius: 4px; margin-top: 8px; }
-  .tip-tag.hype { background: rgba(0,229,160,0.15); color: var(--accent-pre); }
-  .tip-tag.alert { background: rgba(255,77,77,0.15); color: var(--accent-live); }
-  .tip-tag.topic { background: rgba(123,140,255,0.15); color: var(--accent-post); }
-  .empty-tips { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 160px; color: var(--muted); font-size: 13px; gap: 8px; text-align: center; }
-  ::-webkit-scrollbar { width: 4px; } ::-webkit-scrollbar-thumb { background: #333; border-radius: 2px; }
+  .tip-time { font-family: var(--mono); font-size: 10px; color: var(--muted); margin-bottom: 5px; }
+  .tip-text { font-size: 13px; line-height: 1.55; color: var(--white); }
+  .tip-razon { font-size: 11px; color: var(--muted); margin-top: 4px; font-style: italic; }
+  .tag { display: inline-block; font-family: var(--mono); font-size: 10px; padding: 2px 8px; border-radius: 3px; margin-top: 6px; }
+  .tag.HYPE { background: rgba(0,229,160,0.12); color: var(--green); }
+  .tag.ALERTA { background: rgba(255,77,77,0.12); color: var(--red); }
+  .tag.TEMA { background: rgba(123,140,255,0.12); color: var(--blue); }
+  .empty { display: flex; align-items: center; justify-content: center; height: 80px; color: var(--muted); font-size: 13px; }
+
+  /* RIGHT PANEL */
+  .right { display: flex; flex-direction: column; overflow: hidden; }
+  .topics-header { padding: 20px 28px 16px; border-bottom: 1px solid #1e1e1e; }
+  .topics-title { font-family: var(--display); font-size: 20px; font-weight: 800; margin-bottom: 4px; }
+  .topics-sub { font-size: 12px; color: var(--muted); }
+  .topics-grid { flex: 1; padding: 20px 28px; display: flex; flex-direction: column; gap: 12px; overflow-y: auto; }
+  .topic-card { background: var(--gray); border: 1px solid #242424; border-radius: 10px; padding: 16px 20px; cursor: pointer; transition: all 0.15s; }
+  .topic-card:hover { border-color: #3a3a3a; background: #1f1f1f; }
+  .topic-card.hot { border-color: rgba(0,229,160,0.3); }
+  .topic-num { font-family: var(--mono); font-size: 10px; color: var(--muted); margin-bottom: 6px; }
+  .topic-text { font-size: 15px; font-weight: 500; color: var(--white); }
+  .topic-bar { height: 2px; background: #2a2a2a; border-radius: 1px; margin-top: 10px; overflow: hidden; }
+  .topic-fill { height: 100%; background: var(--green); border-radius: 1px; transition: width 0.5s ease; }
+  .no-topics { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 200px; color: var(--muted); font-size: 13px; gap: 8px; text-align: center; }
+
+  /* TRANSCRIPT */
+  .transcript-wrap { padding: 16px 28px 20px; border-top: 1px solid #1e1e1e; }
+
+  ::-webkit-scrollbar { width: 3px; } ::-webkit-scrollbar-thumb { background: #2a2a2a; }
 </style>
 </head>
 <body>
-<div class="shell">
-  <aside class="sidebar">
-    <div class="logo">
-      <div class="logo-mark">HUMANS</div>
-      <div class="logo-sub">LIVE PERFORMANCE COACH</div>
+
+<div class="header">
+  <div class="logo">HUMANS <span>●</span> Coach en vivo</div>
+  <div class="badge off" id="badge"><div class="pulse"></div><span id="badge-text">INACTIVO</span></div>
+</div>
+
+<div class="main">
+  <!-- LEFT -->
+  <div class="left">
+    <div class="setup">
+      <label class="field-label">URL DEL LIVE</label>
+      <input type="url" id="live-url" placeholder="https://youtube.com/watch?v=..." />
+      <div class="interval-row">
+        <div class="int-opt sel" onclick="setInterval(this,30)">30s</div>
+        <div class="int-opt" onclick="setInterval(this,60)">60s</div>
+        <div class="int-opt" onclick="setInterval(this,90)">90s</div>
+      </div>
+      <button class="start-btn" id="start-btn" onclick="toggleMonitor()">Iniciar monitoreo →</button>
     </div>
-    <nav class="nav">
-      <div class="nav-item active" style="--nav-accent: var(--accent-pre)" onclick="switchPanel('pre')">
-        <div class="dot" style="background: var(--accent-pre)"></div>
-        <div><div class="label">01 / ANTES</div><div style="font-size:12px;margin-top:2px">Pre-Show Brief</div></div>
-      </div>
-      <div class="nav-sep"></div>
-      <div class="nav-item" style="--nav-accent: var(--accent-live)" onclick="switchPanel('live')">
-        <div class="dot" style="background: var(--accent-live)"></div>
-        <div><div class="label">02 / DURANTE</div><div style="font-size:12px;margin-top:2px">Coach en vivo</div></div>
-      </div>
-      <div class="nav-sep"></div>
-      <div class="nav-item" style="--nav-accent: var(--accent-post)" onclick="switchPanel('post')">
-        <div class="dot" style="background: var(--accent-post)"></div>
-        <div><div class="label">03 / DESPUÉS</div><div style="font-size:12px;margin-top:2px">Post-Show Report</div></div>
-      </div>
-    </nav>
-  </aside>
 
-  <main class="main">
-    <!-- PRE -->
-    <section class="panel active" id="panel-pre">
-      <div class="panel-tag" style="color: var(--accent-pre)">01 / ANTES DEL SHOW</div>
-      <div class="panel-title">Pre-Show Brief</div>
-      <div class="panel-desc">Pegá las URLs de los últimos episodios. El agente analiza comentarios e historial y entrega un brief accionable para el próximo show.</div>
-      <div class="field-group">
-        <label class="field-label">URLS DE EPISODIOS ANTERIORES</label>
-        <div id="pre-urls">
-          <div class="url-row"><input type="url" placeholder="https://youtube.com/watch?v=..." /><button class="icon-btn" onclick="removeUrl(this)">×</button></div>
-          <div class="url-row"><input type="url" placeholder="https://youtube.com/watch?v=..." /><button class="icon-btn" onclick="removeUrl(this)">×</button></div>
-          <div class="url-row"><input type="url" placeholder="https://youtube.com/watch?v=..." /><button class="icon-btn" onclick="removeUrl(this)">×</button></div>
-        </div>
-        <button class="add-url" onclick="addUrl('pre-urls')">+ agregar episodio</button>
+    <div class="metrics">
+      <div class="metric">
+        <div class="metric-val" id="m-viewers">—</div>
+        <div class="metric-lbl">VIEWERS</div>
+        <div class="metric-delta" id="m-viewers-d"></div>
       </div>
-      <div class="field-group">
-        <label class="field-label">CONTEXTO DEL PRÓXIMO SHOW (opcional)</label>
-        <textarea id="pre-context" placeholder="Ej: el próximo episodio tiene invitado famoso, queremos hablar de relaciones..."></textarea>
+      <div class="metric">
+        <div class="metric-val" id="m-msgs">0</div>
+        <div class="metric-lbl">MSGS CHAT</div>
+        <div class="metric-delta" id="m-msgs-d"></div>
       </div>
-      <button class="btn-primary" style="background: var(--accent-pre); color: var(--black)" onclick="runPre()">Generar Pre-Show Brief →</button>
-      <div class="status-bar" id="pre-status"></div>
-      <div class="result-box" id="pre-result">
-        <div class="result-header">
-          <span class="result-label">BRIEF GENERADO</span>
-          <button class="copy-btn" onclick="copyResult('pre-content')">copiar</button>
-        </div>
-        <div class="result-content" id="pre-content"></div>
+      <div class="metric">
+        <div class="metric-val" id="m-mpm">0</div>
+        <div class="metric-lbl">MSGS/MIN</div>
+        <div class="metric-delta"></div>
       </div>
-    </section>
+      <div class="metric">
+        <div class="metric-val" id="m-cycles">0</div>
+        <div class="metric-lbl">ANÁLISIS</div>
+        <div class="metric-delta"></div>
+      </div>
+    </div>
 
-    <!-- LIVE -->
-    <section class="panel" id="panel-live">
-      <div class="panel-tag" style="color: var(--accent-live)">02 / DURANTE EL SHOW</div>
-      <div class="panel-title">Coach en vivo</div>
-      <div class="panel-desc">El agente monitorea el chat y genera tips accionables cada N segundos. Mantené esta pantalla abierta durante el stream.</div>
-      <div class="live-grid">
-        <div class="live-card">
-          <div class="live-card-label">ESTADO</div>
-          <div class="live-badge off" id="live-badge"><div class="pulse"></div><span id="live-badge-text">INACTIVO</span></div>
-          <div class="field-group" style="margin-bottom:12px">
-            <label class="field-label">URL DEL LIVE ACTUAL</label>
-            <input type="url" id="live-url" placeholder="https://youtube.com/watch?v=..." />
-          </div>
-          <div class="field-group" style="margin-bottom:12px">
-            <label class="field-label">INTERVALO DE ANÁLISIS</label>
-            <div class="interval-row">
-              <div class="interval-opt selected" onclick="selectInterval(this,60)">60s</div>
-              <div class="interval-opt" onclick="selectInterval(this,90)">90s</div>
-              <div class="interval-opt" onclick="selectInterval(this,120)">2min</div>
-            </div>
-          </div>
-          <button class="btn-primary" id="live-btn" style="background: var(--accent-live); color: var(--white); width:100%" onclick="toggleLive()">Iniciar monitoreo →</button>
-        </div>
-        <div class="live-card">
-          <div class="live-card-label">MÉTRICAS EN VIVO</div>
-          <div class="metrics-row">
-            <div><div class="metric-val" id="live-msgs">0</div><div class="metric-lbl">MSGS CHAT</div></div>
-            <div><div class="metric-val" id="live-cycles">0</div><div class="metric-lbl">ANÁLISIS</div></div>
-          </div>
-          <label class="field-label">NOTAS DEL PRODUCER</label>
-          <textarea id="live-transcript" placeholder="Pegá lo que están hablando los hosts o tomá notas en vivo..." style="min-height:90px"></textarea>
-        </div>
+    <div class="chart-wrap">
+      <div class="chart-label">AUDIENCIA + COMENTARIOS EN TIEMPO REAL</div>
+      <div class="chart-container">
+        <canvas id="live-chart"></canvas>
       </div>
-      <div class="live-card-label" style="margin-bottom:12px">TIPS DEL COACH</div>
-      <div class="tip-stream" id="tip-stream">
-        <div class="empty-tips" id="empty-tips">
-          <span style="font-size:28px">⏸</span>
-          <span>Los tips aparecen acá cuando el monitoreo esté activo</span>
-        </div>
-      </div>
-    </section>
+    </div>
 
-    <!-- POST -->
-    <section class="panel" id="panel-post">
-      <div class="panel-tag" style="color: var(--accent-post)">03 / DESPUÉS DEL SHOW</div>
-      <div class="panel-title">Post-Show Report</div>
-      <div class="panel-desc">Analizá el episodio que terminó. El reporte alimenta el próximo Pre-Show Brief.</div>
-      <div class="field-group">
-        <label class="field-label">URL DEL EPISODIO TERMINADO</label>
-        <div id="post-urls">
-          <div class="url-row"><input type="url" placeholder="https://youtube.com/watch?v=..." /><button class="icon-btn" onclick="removeUrl(this)">×</button></div>
-        </div>
-        <button class="add-url" onclick="addUrl('post-urls')">+ agregar episodio</button>
+    <div class="tips-wrap">
+      <div class="tips-label">TIPS DEL COACH</div>
+      <div id="tips-list">
+        <div class="empty">Los tips aparecen cuando el monitoreo esté activo</div>
       </div>
-      <div class="field-group">
-        <label class="field-label">NOTAS DEL PRODUCER</label>
-        <textarea id="post-notes" placeholder="Ej: el invitado habló de su separación y el chat explotó..." style="min-height:100px"></textarea>
+    </div>
+  </div>
+
+  <!-- RIGHT -->
+  <div class="right">
+    <div class="topics-header">
+      <div class="topics-title">Temáticas sugeridas</div>
+      <div class="topics-sub">Basadas en lo que está pidiendo la audiencia ahora mismo</div>
+    </div>
+    <div class="topics-grid" id="topics-grid">
+      <div class="no-topics">
+        <span style="font-size:32px">💬</span>
+        <span>Las temáticas sugeridas aparecen acá cuando el agente detecte patrones en el chat</span>
       </div>
-      <button class="btn-primary" style="background: var(--accent-post); color: var(--white)" onclick="runPost()">Generar Post-Show Report →</button>
-      <div class="status-bar" id="post-status"></div>
-      <div class="result-box" id="post-result">
-        <div class="result-header">
-          <span class="result-label">REPORTE GENERADO</span>
-          <button class="copy-btn" onclick="copyResult('post-content')">copiar</button>
-        </div>
-        <div class="result-content" id="post-content"></div>
-      </div>
-    </section>
-  </main>
+    </div>
+    <div class="transcript-wrap">
+      <label class="field-label">LO QUE ESTÁN HABLANDO LOS HOSTS (ayuda al agente)</label>
+      <textarea id="transcript" placeholder="Escribí o pegá de qué están hablando los hosts ahora... Ej: están hablando del ex de Andrea, contando historias de sus relaciones pasadas"></textarea>
+    </div>
+  </div>
 </div>
 
 <script>
-const API = '';
-let liveInterval = null, liveIntervalMs = 60000, liveCycles = 0, liveIsRunning = false;
+const API_BASE = '';
+let isRunning = false;
+let intervalMs = 30000;
+let timer = null;
+let cycles = 0;
+let prevMsgCount = 0;
+let prevViewers = 0;
+let chartLabels = [];
+let chartViewers = [];
+let chartMsgs = [];
+let chart = null;
+let allTopics = [];
 
-function switchPanel(id) {
-  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
-  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-  document.getElementById('panel-' + id).classList.add('active');
-  document.querySelectorAll('.nav-item')[id === 'pre' ? 0 : id === 'live' ? 1 : 2].classList.add('active');
-}
-
-function addUrl(cid) {
-  const c = document.getElementById(cid);
-  const r = document.createElement('div'); r.className = 'url-row';
-  r.innerHTML = '<input type="url" placeholder="https://youtube.com/watch?v=..." /><button class="icon-btn" onclick="removeUrl(this)">×</button>';
-  c.appendChild(r);
-}
-function removeUrl(btn) {
-  const c = btn.closest('[id$="-urls"]');
-  if (c.children.length > 1) btn.closest('.url-row').remove();
-}
-function getUrls(cid) {
-  return Array.from(document.querySelectorAll(`#${cid} input`)).map(i => i.value.trim()).filter(Boolean);
-}
-function extractId(url) {
-  try { return new URL(url).searchParams.get('v') || url.split('/').pop().split('?')[0]; }
-  catch { return null; }
-}
-function setStatus(id, type, msg) {
-  const el = document.getElementById(id + '-status');
-  el.className = 'status-bar ' + type;
-  el.innerHTML = type === 'loading' ? `<div class="spinner"></div><span>${msg}</span>` : msg;
-  el.style.display = '';
-}
-function hideStatus(id) { document.getElementById(id + '-status').style.display = 'none'; }
-
-async function runPre() {
-  const urls = getUrls('pre-urls');
-  if (!urls.length) return alert('Agregá al menos una URL.');
-  const btn = document.querySelector('#panel-pre .btn-primary');
-  btn.disabled = true;
-  document.getElementById('pre-result').style.display = 'none';
-  setStatus('pre', 'loading', 'Extrayendo data de YouTube...');
-  try {
-    const res = await fetch(API + '/api/brief', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ urls, context: document.getElementById('pre-context').value.trim() })
-    });
-    const d = await res.json();
-    if (d.error) throw new Error(d.error);
-    document.getElementById('pre-content').textContent = d.brief;
-    document.getElementById('pre-result').style.display = 'block';
-    hideStatus('pre');
-  } catch(e) {
-    setStatus('pre', 'error', 'Error: ' + e.message);
+// Chart setup
+const ctx = document.getElementById('live-chart').getContext('2d');
+chart = new Chart(ctx, {
+  type: 'line',
+  data: {
+    labels: chartLabels,
+    datasets: [
+      {
+        label: 'Viewers',
+        data: chartViewers,
+        borderColor: '#ff4d4d',
+        backgroundColor: 'rgba(255,77,77,0.05)',
+        borderWidth: 1.5,
+        pointRadius: 2,
+        tension: 0.4,
+        yAxisID: 'y'
+      },
+      {
+        label: 'Msgs/min',
+        data: chartMsgs,
+        borderColor: '#00e5a0',
+        backgroundColor: 'rgba(0,229,160,0.05)',
+        borderWidth: 1.5,
+        pointRadius: 2,
+        tension: 0.4,
+        yAxisID: 'y1'
+      }
+    ]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    animation: { duration: 300 },
+    plugins: { legend: { display: false } },
+    scales: {
+      x: { display: false },
+      y: {
+        display: true,
+        position: 'left',
+        grid: { color: '#1e1e1e' },
+        ticks: { color: '#555', font: { size: 9 }, maxTicksLimit: 4 }
+      },
+      y1: {
+        display: true,
+        position: 'right',
+        grid: { drawOnChartArea: false },
+        ticks: { color: '#555', font: { size: 9 }, maxTicksLimit: 4 }
+      }
+    }
   }
-  btn.disabled = false;
+});
+
+function setInterval(el, s) {
+  document.querySelectorAll('.int-opt').forEach(o => o.classList.remove('sel'));
+  el.classList.add('sel');
+  intervalMs = s * 1000;
 }
 
-function selectInterval(el, s) {
-  document.querySelectorAll('.interval-opt').forEach(o => o.classList.remove('selected'));
-  el.classList.add('selected'); liveIntervalMs = s * 1000;
+function extractVideoId(url) {
+  try {
+    const u = new URL(url);
+    return u.searchParams.get('v') || u.pathname.split('/').pop().split('?')[0];
+  } catch { return null; }
 }
-function toggleLive() { liveIsRunning ? stopLive() : startLive(); }
-function startLive() {
+
+function toggleMonitor() {
+  isRunning ? stopMonitor() : startMonitor();
+}
+
+function startMonitor() {
   const url = document.getElementById('live-url').value.trim();
   if (!url) return alert('Ingresá la URL del live.');
-  liveIsRunning = true; liveCycles = 0;
-  document.getElementById('live-btn').textContent = 'Detener monitoreo ■';
-  document.getElementById('live-btn').style.background = '#333';
-  document.getElementById('live-badge').className = 'live-badge on';
-  document.getElementById('live-badge-text').textContent = 'EN VIVO';
-  document.getElementById('empty-tips').style.display = 'none';
-  const id = extractId(url);
-  runLiveCycle(id);
-  liveInterval = setInterval(() => runLiveCycle(id), liveIntervalMs);
-}
-function stopLive() {
-  clearInterval(liveInterval); liveIsRunning = false;
-  document.getElementById('live-btn').textContent = 'Iniciar monitoreo →';
-  document.getElementById('live-btn').style.background = 'var(--accent-live)';
-  document.getElementById('live-badge').className = 'live-badge off';
-  document.getElementById('live-badge-text').textContent = 'INACTIVO';
-}
-async function runLiveCycle(videoId) {
-  try {
-    const res = await fetch(API + '/api/live', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ videoId, transcript: document.getElementById('live-transcript').value.trim() })
-    });
-    const d = await res.json();
-    document.getElementById('live-msgs').textContent = d.msgCount || 0;
-    document.getElementById('live-cycles').textContent = ++liveCycles;
-    addTip(d.tip || '');
-  } catch(e) { addTip('[ALERTA] Error de conexión.'); }
-}
-function addTip(text) {
-  const stream = document.getElementById('tip-stream');
-  const now = new Date().toLocaleTimeString('es', { hour:'2-digit', minute:'2-digit', second:'2-digit' });
-  let tagType = 'topic', tagLabel = 'TEMA';
-  if (text.includes('[HYPE]')) { tagType = 'hype'; tagLabel = 'HYPE'; }
-  else if (text.includes('[ALERTA]')) { tagType = 'alert'; tagLabel = 'ALERTA'; }
-  const clean = text.replace(/\[(HYPE|ALERTA|TEMA)\]/g, '').trim();
-  const item = document.createElement('div'); item.className = 'tip-item';
-  item.innerHTML = `<div class="tip-time">${now}</div><div class="tip-text">${clean}</div><span class="tip-tag ${tagType}">${tagLabel}</span>`;
-  stream.insertBefore(item, stream.firstChild);
+  isRunning = true;
+  cycles = 0;
+  prevMsgCount = 0;
+  document.getElementById('start-btn').textContent = 'Detener monitoreo ■';
+  document.getElementById('start-btn').classList.add('active');
+  document.getElementById('badge').className = 'badge on';
+  document.getElementById('badge-text').textContent = 'EN VIVO';
+  document.getElementById('tips-list').innerHTML = '';
+  const id = extractVideoId(url);
+  runCycle(id);
+  timer = window.setInterval(() => runCycle(id), intervalMs);
 }
 
-async function runPost() {
-  const urls = getUrls('post-urls');
-  if (!urls.length) return alert('Agregá al menos una URL.');
-  const btn = document.querySelector('#panel-post .btn-primary');
-  btn.disabled = true;
-  document.getElementById('post-result').style.display = 'none';
-  setStatus('post', 'loading', 'Extrayendo data del episodio...');
+function stopMonitor() {
+  window.clearInterval(timer);
+  isRunning = false;
+  document.getElementById('start-btn').textContent = 'Iniciar monitoreo →';
+  document.getElementById('start-btn').classList.remove('active');
+  document.getElementById('badge').className = 'badge off';
+  document.getElementById('badge-text').textContent = 'INACTIVO';
+}
+
+async function runCycle(videoId) {
+  const transcript = document.getElementById('transcript').value.trim();
   try {
-    const res = await fetch(API + '/api/report', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ urls, notes: document.getElementById('post-notes').value.trim() })
+    const res = await fetch(API_BASE + '/api/live', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ videoId, transcript, previousMsgCount: prevMsgCount })
     });
     const d = await res.json();
-    if (d.error) throw new Error(d.error);
-    document.getElementById('post-content').textContent = d.report;
-    document.getElementById('post-result').style.display = 'block';
-    hideStatus('post');
+    cycles++;
+
+    // Update metrics
+    const viewerDelta = d.viewerCount - prevViewers;
+    const msgDelta = d.msgCount - prevMsgCount;
+
+    document.getElementById('m-viewers').textContent = d.viewerCount > 0 ? d.viewerCount.toLocaleString() : '—';
+    document.getElementById('m-msgs').textContent = d.msgCount;
+    document.getElementById('m-mpm').textContent = d.msgsPerMin;
+    document.getElementById('m-cycles').textContent = cycles;
+
+    if (prevViewers > 0) {
+      const vd = document.getElementById('m-viewers-d');
+      vd.textContent = (viewerDelta >= 0 ? '+' : '') + viewerDelta;
+      vd.className = 'metric-delta ' + (viewerDelta >= 0 ? 'up' : 'down');
+    }
+    if (prevMsgCount > 0) {
+      const md = document.getElementById('m-msgs-d');
+      md.textContent = '+' + msgDelta + ' nuevos';
+      md.className = 'metric-delta up';
+    }
+
+    prevViewers = d.viewerCount;
+    prevMsgCount = d.msgCount;
+
+    // Update chart
+    const now = new Date().toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    chartLabels.push(now);
+    chartViewers.push(d.viewerCount || 0);
+    chartMsgs.push(d.msgsPerMin || 0);
+    if (chartLabels.length > 20) { chartLabels.shift(); chartViewers.shift(); chartMsgs.shift(); }
+    chart.update();
+
+    // Add tip
+    addTip(d);
+
+    // Update topics
+    if (d.temas_sugeridos?.length) updateTopics(d.temas_sugeridos);
+
   } catch(e) {
-    setStatus('post', 'error', 'Error: ' + e.message);
+    addTip({ tag: 'ALERTA', tip: 'Error de conexión con el servidor.', razon_hype: '' });
   }
-  btn.disabled = false;
 }
 
-function copyResult(id) {
-  navigator.clipboard.writeText(document.getElementById(id).textContent).then(() => {
-    const btn = event.target; btn.textContent = '✓ copiado';
-    setTimeout(() => btn.textContent = 'copiar', 2000);
+function addTip(d) {
+  const list = document.getElementById('tips-list');
+  const now = new Date().toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  const item = document.createElement('div');
+  item.className = 'tip-item';
+  item.innerHTML = `
+    <div class="tip-time">${now}</div>
+    <div class="tip-text">${d.tip || ''}</div>
+    ${d.razon_hype ? `<div class="tip-razon">${d.razon_hype}</div>` : ''}
+    <span class="tag ${d.tag || 'TEMA'}">${d.tag || 'TEMA'}</span>
+  `;
+  list.insertBefore(item, list.firstChild);
+}
+
+function updateTopics(topics) {
+  allTopics = topics;
+  const grid = document.getElementById('topics-grid');
+  grid.innerHTML = '';
+  topics.forEach((t, i) => {
+    const width = 100 - (i * 20);
+    const card = document.createElement('div');
+    card.className = 'topic-card' + (i === 0 ? ' hot' : '');
+    card.innerHTML = `
+      <div class="topic-num">TEMÁTICA ${String(i+1).padStart(2,'0')}</div>
+      <div class="topic-text">${t}</div>
+      <div class="topic-bar"><div class="topic-fill" style="width:${width}%"></div></div>
+    `;
+    grid.appendChild(card);
   });
 }
 </script>
