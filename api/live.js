@@ -5,45 +5,61 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).end();
 
-  const { videoId, transcript } = req.body;
+  const { videoId, transcript, previousMsgCount } = req.body;
   const YT_KEY = process.env.YOUTUBE_API_KEY;
   const ANT_KEY = process.env.ANTHROPIC_API_KEY;
   const YT_BASE = 'https://www.googleapis.com/youtube/v3';
 
   let messages = [];
   let msgCount = 0;
+  let viewerCount = 0;
+
   try {
-    const meta = await fetch(`${YT_BASE}/videos?part=liveStreamingDetails&id=${videoId}&key=${YT_KEY}`);
-    const d = await meta.json();
-    const chatId = d.items?.[0]?.liveStreamingDetails?.activeLiveChatId;
+    const metaRes = await fetch(`${YT_BASE}/videos?part=liveStreamingDetails,statistics&id=${videoId}&key=${YT_KEY}`);
+    const metaData = await metaRes.json();
+    const item = metaData.items?.[0];
+    const chatId = item?.liveStreamingDetails?.activeLiveChatId;
+    viewerCount = parseInt(item?.liveStreamingDetails?.concurrentViewers || 0);
     if (chatId) {
-      const chat = await fetch(`${YT_BASE}/liveChat/messages?part=snippet&liveChatId=${chatId}&maxResults=200&key=${YT_KEY}`);
-      const cd = await chat.json();
-      messages = (cd.items || []).map(i => i.snippet?.displayMessage).filter(Boolean);
+      const chatRes = await fetch(`${YT_BASE}/liveChat/messages?part=snippet&liveChatId=${chatId}&maxResults=200&key=${YT_KEY}`);
+      const chatData = await chatRes.json();
+      messages = (chatData.items || []).map(i => i.snippet?.displayMessage).filter(Boolean);
       msgCount = messages.length;
     }
   } catch(e) {}
 
-  const prompt = `Sos el coach en tiempo real de un show de streaming en LATAM. Estás monitoreando el show AHORA.
+  const newMsgs = Math.max(0, msgCount - (previousMsgCount || 0));
+  const msgsPerMin = newMsgs * 2;
 
-MENSAJES DEL CHAT EN VIVO (últimos ${messages.length}):
-${messages.slice(-100).map(m => `- ${m}`).join('\n') || '(sin mensajes de chat en vivo aún)'}
+  const prompt = `Sos el coach en tiempo real de un show de streaming en LATAM. Ciclo cada 30 segundos.
 
-${transcript ? `LO QUE ESTÁN HABLANDO LOS HOSTS:\n${transcript}` : ''}
+METRICAS:
+- Viewers: ${viewerCount}
+- Msgs chat total: ${msgCount}
+- Msgs nuevos este ciclo: ${newMsgs}
+- Tasa: ~${msgsPerMin} msgs/min
 
-Generá UN tip accionable para el producer ahora mismo. El tip tiene que ser:
-- Específico y urgente (para aplicar en los próximos 3 minutos)
-- Basado en lo que el chat está pidiendo o respondiendo
-- En máximo 3 oraciones
-- Con una etiqueta al inicio: [HYPE] si el chat está muy activo, [ALERTA] si cae el engagement, [TEMA] si hay algo nuevo que la gente pide
+CHAT (ultimos 100):
+${messages.slice(-100).map(m => `- ${m}`).join('\n') || '(sin mensajes)'}
 
-Solo el tip, sin introducción ni formato extra.`;
+${transcript ? `HOSTS HABLANDO DE:\n${transcript}` : ''}
 
-  const claude = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-api-key': ANT_KEY, 'anthropic-version': '2023-06-01' },
-    body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 200, messages: [{ role: 'user', content: prompt }] })
-  });
-  const d = await claude.json();
-  res.json({ tip: d.content?.[0]?.text || '', msgCount });
+Responde SOLO JSON sin texto extra:
+{"tag":"HYPE|ALERTA|TEMA","tip":"maximo 2 oraciones accionables para ahora","temas_sugeridos":["tema1","tema2","tema3"],"razon_hype":"que esta generando engagement ahora"}`;
+
+  try {
+    const claude = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': ANT_KEY, 'anthropic-version': '2023-06-01' },
+      body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 300, messages: [{ role: 'user', content: prompt }] })
+    });
+    const d = await claude.json();
+    const text = d.content?.[0]?.text || '{}';
+    let parsed;
+    try { parsed = JSON.parse(text.replace(/```json|```/g, '').trim()); }
+    catch(e) { parsed = { tag: 'TEMA', tip: text, temas_sugeridos: [], razon_hype: '' }; }
+    res.json({ ...parsed, msgCount, viewerCount, msgsPerMin });
+  } catch(e) {
+    res.json({ tag: 'ALERTA', tip: 'Error de conexion.', temas_sugeridos: [], razon_hype: '', msgCount, viewerCount, msgsPerMin: 0 });
+  }
 }
