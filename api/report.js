@@ -5,72 +5,72 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).end();
 
-  const { urls, notes } = req.body;
+  const { videoUrl, notes } = req.body;
   const YT_KEY = process.env.YOUTUBE_API_KEY;
   const ANT_KEY = process.env.ANTHROPIC_API_KEY;
-  const YT_BASE = 'https://www.googleapis.com/youtube/v3';
 
-  function extractId(url) {
-    try { return new URL(url).searchParams.get('v') || url.split('/').pop().split('?')[0]; }
-    catch { return null; }
-  }
-
-  const episodes = [];
-  for (const url of urls) {
-    const id = extractId(url);
-    if (!id) continue;
+  function extractVideoId(url) {
     try {
-      const metaRes = await fetch(`${YT_BASE}/videos?part=snippet,statistics&id=${id}&key=${YT_KEY}`);
-      const meta = await metaRes.json();
-      if (!meta.items?.length) continue;
-      const v = meta.items[0];
-      const commRes = await fetch(`${YT_BASE}/commentThreads?part=snippet&videoId=${id}&maxResults=100&order=relevance&key=${YT_KEY}`);
-      const comm = await commRes.json();
-      const comments = (comm.items || []).map(i => {
-        const s = i.snippet.topLevelComment.snippet;
-        return { text: s.textDisplay, likes: s.likeCount };
-      });
-      episodes.push({
-        title: v.snippet.title,
-        date: v.snippet.publishedAt?.slice(0,10),
-        views: v.statistics.viewCount,
-        likes: v.statistics.likeCount,
-        commentCount: v.statistics.commentCount,
-        comments
-      });
-    } catch(e) {}
+      const u = new URL(url);
+      return u.searchParams.get('v') || u.pathname.split('/').pop().split('?')[0];
+    } catch { return url.split('/').pop().split('?')[0]; }
   }
 
-  if (!episodes.length) return res.status(400).json({ error: 'No se pudo obtener data.' });
+  try {
+    const videoId = extractVideoId(videoUrl);
 
-  const epContext = episodes.map(ep => {
-    const top = ep.comments.sort((a,b) => b.likes - a.likes).slice(0,60)
-      .map(c => `- [${c.likes} likes] ${c.text}`).join('\n');
-    return `=== ${ep.title} ===\nFecha: ${ep.date} | Views: ${ep.views} | Likes: ${ep.likes} | Comentarios: ${ep.commentCount}\n\nCOMENTARIOS:\n${top}`;
-  }).join('\n\n---\n\n');
+    const videoRes = await fetch(`https://www.googleapis.com/youtube/v3/videos?part=liveStreamingDetails,snippet,statistics&id=${videoId}&key=${YT_KEY}`);
+    const videoData = await videoRes.json();
+    const video = videoData.items?.[0];
+    if (!video) throw new Error('Video no encontrado');
 
-  const prompt = `Sos el coach de performance de un show de streaming en LATAM. El show acaba de terminar.
+    const chatId = video.liveStreamingDetails?.activeLiveChatId;
+    let messages = [];
 
-${epContext}
+    if (chatId) {
+      const chatRes = await fetch(`https://www.googleapis.com/youtube/v3/liveChat/messages?liveChatId=${chatId}&part=snippet&maxResults=2000&key=${YT_KEY}`);
+      const chatData = await chatRes.json();
+      messages = chatData.items?.map(m => m.snippet.displayMessage).filter(Boolean) || [];
+    }
 
-${notes ? `NOTAS DEL PRODUCER:\n${notes}` : ''}
+    const claudeRes = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': ANT_KEY, 'anthropic-version': '2023-06-01' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1500,
+        system: `Sos un coach experto en entretenimiento en vivo. Generás reportes post-show detallados y accionables para productores de contenido. El reporte debe ser en español, claro, con insights reales y recomendaciones para el próximo episodio.`,
+        messages: [{
+          role: 'user',
+          content: `Generá un reporte post-show completo para: ${video.snippet?.title}
+          
+Mensajes del chat (${messages.length} total): ${messages.slice(0, 500).join(' | ')}
+          
+Notas del productor: ${notes || 'ninguna'}
+Vistas: ${video.statistics?.viewCount || 'N/A'}
+Likes: ${video.statistics?.likeCount || 'N/A'}
 
-Generá un POST-SHOW REPORT completo. Incluí:
+El reporte debe incluir:
+1. RESUMEN EJECUTIVO (2-3 líneas)
+2. TEMAS MÁS COMENTADOS (top 5 con análisis)
+3. MOMENTOS DE MAYOR ENGAGEMENT
+4. LO QUE FUNCIONÓ
+5. OPORTUNIDADES DE MEJORA
+6. RECOMENDACIONES PARA EL PRÓXIMO EPISODIO`
+        }]
+      })
+    });
 
-1. QUÉ FUNCIONÓ — momentos y temas que generaron más respuesta (con evidencia de comentarios)
-2. QUÉ NO FUNCIONÓ — qué cayó el engagement, qué ignoró la audiencia
-3. MOMENTOS VIRALES — fragmentos con potencial de clip
-4. LO QUE LA AUDIENCIA PIDE PARA EL PRÓXIMO — temas repetidos, preguntas sin responder
-5. 3 CAMBIOS CONCRETOS para el próximo episodio
-6. FRASE RESUMEN DEL EPISODIO — una línea que capture qué fue este show
+    const claudeData = await claudeRes.json();
+    const report = claudeData.content?.[0]?.text || 'No se pudo generar el reporte';
 
-Este reporte alimenta el próximo Pre-Show Brief. Sé específico y accionable.`;
+    res.status(200).json({ 
+      report, 
+      showTitle: video.snippet?.title,
+      stats: { views: video.statistics?.viewCount, likes: video.statistics?.likeCount, messages: messages.length }
+    });
 
-  const claude = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-api-key': ANT_KEY, 'anthropic-version': '2023-06-01' },
-    body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 1500, messages: [{ role: 'user', content: prompt }] })
-  });
-  const d = await claude.json();
-  res.json({ report: d.content?.[0]?.text || '' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 }
