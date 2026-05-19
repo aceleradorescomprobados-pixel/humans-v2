@@ -1,368 +1,84 @@
-<!DOCTYPE html>
-<html lang="es">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>HUMANS — Coach en Vivo v2</title>
-<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
-<style>
-  :root {
-    --black: #0a0a0a; --white: #f5f4f0; --gray: #1a1a1a; --gray2: #242424;
-    --muted: #666; --green: #00e5a0; --red: #ff4d4d; --blue: #7b8cff;
-    --mono: 'DM Mono', monospace; --display: 'Syne', sans-serif; --body: 'DM Sans', sans-serif;
+export default async function handler(req, res) {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  if (req.method === 'OPTIONS') return res.status(200).end();
+  if (req.method !== 'POST') return res.status(405).end();
+
+  const { videoUrl, notes } = req.body;
+  const YT_KEY = process.env.YOUTUBE_API_KEY;
+  const ANT_KEY = process.env.ANTHROPIC_API_KEY;
+
+  function extractVideoId(url) {
+    try {
+      const u = new URL(url);
+      return u.searchParams.get('v') || u.pathname.split('/').pop().split('?')[0];
+    } catch { return url.split('/').pop().split('?')[0]; }
   }
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  html, body { background: var(--black); color: var(--white); font-family: var(--body); min-height: 100vh; }
 
-  .header { padding: 20px 32px; border-bottom: 1px solid #1e1e1e; display: flex; align-items: center; justify-content: space-between; }
-  .logo { font-family: var(--display); font-size: 16px; font-weight: 800; }
-  .logo span { color: var(--red); }
-  .badge { display: flex; align-items: center; gap: 6px; font-family: var(--mono); font-size: 11px; padding: 6px 14px; border-radius: 100px; }
-  .badge.on { background: rgba(255,77,77,0.12); color: var(--red); border: 1px solid rgba(255,77,77,0.25); }
-  .badge.off { background: var(--gray2); color: var(--muted); border: 1px solid #2a2a2a; }
-  .pulse { width: 6px; height: 6px; border-radius: 50%; background: var(--red); }
-  .badge.on .pulse { animation: pulse 1.2s ease-in-out infinite; }
-  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
-
-  .main { display: grid; grid-template-columns: 340px 1fr; gap: 0; height: calc(100vh - 61px); }
-
-  /* LEFT PANEL */
-  .left { border-right: 1px solid #1e1e1e; display: flex; flex-direction: column; overflow: hidden; }
-  .setup { padding: 20px; border-bottom: 1px solid #1e1e1e; }
-  .field-label { font-family: var(--mono); font-size: 10px; color: var(--muted); letter-spacing: 0.1em; margin-bottom: 6px; display: block; }
-  input[type=url], textarea {
-    width: 100%; background: var(--gray2); border: 1px solid #2a2a2a; border-radius: 6px;
-    color: var(--white); font-family: var(--body); font-size: 13px; padding: 10px 12px; outline: none; transition: border-color 0.15s;
-  }
-  input:focus, textarea:focus { border-color: #444; }
-  textarea { resize: none; min-height: 72px; margin-top: 12px; }
-  input::placeholder, textarea::placeholder { color: #444; }
-  .interval-row { display: flex; gap: 6px; margin: 12px 0; }
-  .int-opt { flex: 1; padding: 8px; background: var(--gray2); border: 1px solid #2a2a2a; border-radius: 6px; text-align: center; cursor: pointer; font-family: var(--mono); font-size: 11px; color: var(--muted); transition: all 0.15s; }
-  .int-opt.sel { border-color: var(--red); color: var(--white); }
-  .start-btn { width: 100%; padding: 12px; background: var(--red); color: var(--white); border: none; border-radius: 6px; font-family: var(--display); font-size: 14px; font-weight: 700; cursor: pointer; transition: all 0.15s; }
-  .start-btn:hover { opacity: 0.85; }
-  .start-btn.active { background: #333; color: var(--muted); }
-
-  /* METRICS */
-  .metrics { padding: 16px 20px; border-bottom: 1px solid #1e1e1e; display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-  .metric { background: var(--gray2); border-radius: 8px; padding: 12px; }
-  .metric-val { font-family: var(--display); font-size: 24px; font-weight: 800; line-height: 1; }
-  .metric-lbl { font-family: var(--mono); font-size: 9px; color: var(--muted); letter-spacing: 0.1em; margin-top: 4px; }
-  .metric-delta { font-family: var(--mono); font-size: 11px; margin-top: 4px; }
-  .up { color: var(--green); }
-  .down { color: var(--red); }
-
-  /* CHART */
-  .chart-wrap { padding: 16px 20px; border-bottom: 1px solid #1e1e1e; }
-  .chart-label { font-family: var(--mono); font-size: 10px; color: var(--muted); letter-spacing: 0.1em; margin-bottom: 10px; }
-  .chart-container { height: 120px; position: relative; }
-
-  /* TIPS STREAM */
-  .tips-wrap { flex: 1; overflow-y: auto; padding: 16px 20px; }
-  .tips-label { font-family: var(--mono); font-size: 10px; color: var(--muted); letter-spacing: 0.1em; margin-bottom: 12px; }
-  .tip-item { padding: 12px 0; border-bottom: 1px solid #1e1e1e; }
-  .tip-item:last-child { border-bottom: none; }
-  .tip-time { font-family: var(--mono); font-size: 10px; color: var(--muted); margin-bottom: 5px; }
-  .tip-text { font-size: 13px; line-height: 1.55; color: var(--white); }
-  .tip-razon { font-size: 11px; color: var(--muted); margin-top: 4px; font-style: italic; }
-  .tag { display: inline-block; font-family: var(--mono); font-size: 10px; padding: 2px 8px; border-radius: 3px; margin-top: 6px; }
-  .tag.HYPE { background: rgba(0,229,160,0.12); color: var(--green); }
-  .tag.ALERTA { background: rgba(255,77,77,0.12); color: var(--red); }
-  .tag.TEMA { background: rgba(123,140,255,0.12); color: var(--blue); }
-  .empty { display: flex; align-items: center; justify-content: center; height: 80px; color: var(--muted); font-size: 13px; }
-
-  /* RIGHT PANEL */
-  .right { display: flex; flex-direction: column; overflow: hidden; }
-  .topics-header { padding: 20px 28px 16px; border-bottom: 1px solid #1e1e1e; }
-  .topics-title { font-family: var(--display); font-size: 20px; font-weight: 800; margin-bottom: 4px; }
-  .topics-sub { font-size: 12px; color: var(--muted); }
-  .topics-grid { flex: 1; padding: 20px 28px; display: flex; flex-direction: column; gap: 12px; overflow-y: auto; }
-  .topic-card { background: var(--gray); border: 1px solid #242424; border-radius: 10px; padding: 16px 20px; cursor: pointer; transition: all 0.15s; }
-  .topic-card:hover { border-color: #3a3a3a; background: #1f1f1f; }
-  .topic-card.hot { border-color: rgba(0,229,160,0.3); }
-  .topic-num { font-family: var(--mono); font-size: 10px; color: var(--muted); margin-bottom: 6px; }
-  .topic-text { font-size: 15px; font-weight: 500; color: var(--white); }
-  .topic-bar { height: 2px; background: #2a2a2a; border-radius: 1px; margin-top: 10px; overflow: hidden; }
-  .topic-fill { height: 100%; background: var(--green); border-radius: 1px; transition: width 0.5s ease; }
-  .no-topics { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 200px; color: var(--muted); font-size: 13px; gap: 8px; text-align: center; }
-
-  /* TRANSCRIPT */
-  .transcript-wrap { padding: 16px 28px 20px; border-top: 1px solid #1e1e1e; }
-
-  ::-webkit-scrollbar { width: 3px; } ::-webkit-scrollbar-thumb { background: #2a2a2a; }
-</style>
-</head>
-<body>
-
-<div class="header">
-  <div class="logo">HUMANS <span>●</span> Coach en vivo</div>
-  <div class="badge off" id="badge"><div class="pulse"></div><span id="badge-text">INACTIVO</span></div>
-</div>
-
-<div class="main">
-  <!-- LEFT -->
-  <div class="left">
-    <div class="setup">
-      <label class="field-label">URL DEL LIVE</label>
-      <input type="url" id="live-url" placeholder="https://youtube.com/watch?v=..." />
-      <div class="interval-row">
-        <div class="int-opt sel" onclick="setInterval(this,30)">30s</div>
-        <div class="int-opt" onclick="setInterval(this,60)">60s</div>
-        <div class="int-opt" onclick="setInterval(this,90)">90s</div>
-      </div>
-      <button class="start-btn" id="start-btn" onclick="toggleMonitor()">Iniciar monitoreo →</button>
-    </div>
-
-    <div class="metrics">
-      <div class="metric">
-        <div class="metric-val" id="m-viewers">—</div>
-        <div class="metric-lbl">VIEWERS</div>
-        <div class="metric-delta" id="m-viewers-d"></div>
-      </div>
-      <div class="metric">
-        <div class="metric-val" id="m-msgs">0</div>
-        <div class="metric-lbl">MSGS CHAT</div>
-        <div class="metric-delta" id="m-msgs-d"></div>
-      </div>
-      <div class="metric">
-        <div class="metric-val" id="m-mpm">0</div>
-        <div class="metric-lbl">MSGS/MIN</div>
-        <div class="metric-delta"></div>
-      </div>
-      <div class="metric">
-        <div class="metric-val" id="m-cycles">0</div>
-        <div class="metric-lbl">ANÁLISIS</div>
-        <div class="metric-delta"></div>
-      </div>
-    </div>
-
-    <div class="chart-wrap">
-      <div class="chart-label">AUDIENCIA + COMENTARIOS EN TIEMPO REAL</div>
-      <div class="chart-container">
-        <canvas id="live-chart"></canvas>
-      </div>
-    </div>
-
-    <div class="tips-wrap">
-      <div class="tips-label">TIPS DEL COACH</div>
-      <div id="tips-list">
-        <div class="empty">Los tips aparecen cuando el monitoreo esté activo</div>
-      </div>
-    </div>
-  </div>
-
-  <!-- RIGHT -->
-  <div class="right">
-    <div class="topics-header">
-      <div class="topics-title">Temáticas sugeridas</div>
-      <div class="topics-sub">Basadas en lo que está pidiendo la audiencia ahora mismo</div>
-    </div>
-    <div class="topics-grid" id="topics-grid">
-      <div class="no-topics">
-        <span style="font-size:32px">💬</span>
-        <span>Las temáticas sugeridas aparecen acá cuando el agente detecte patrones en el chat</span>
-      </div>
-    </div>
-    <div class="transcript-wrap">
-      <label class="field-label">LO QUE ESTÁN HABLANDO LOS HOSTS (ayuda al agente)</label>
-      <textarea id="transcript" placeholder="Escribí o pegá de qué están hablando los hosts ahora... Ej: están hablando del ex de Andrea, contando historias de sus relaciones pasadas"></textarea>
-    </div>
-  </div>
-</div>
-
-<script>
-const API_BASE = '';
-let isRunning = false;
-let intervalMs = 30000;
-let timer = null;
-let cycles = 0;
-let prevMsgCount = 0;
-let prevViewers = 0;
-let chartLabels = [];
-let chartViewers = [];
-let chartMsgs = [];
-let chart = null;
-let allTopics = [];
-
-// Chart setup
-const ctx = document.getElementById('live-chart').getContext('2d');
-chart = new Chart(ctx, {
-  type: 'line',
-  data: {
-    labels: chartLabels,
-    datasets: [
-      {
-        label: 'Viewers',
-        data: chartViewers,
-        borderColor: '#ff4d4d',
-        backgroundColor: 'rgba(255,77,77,0.05)',
-        borderWidth: 1.5,
-        pointRadius: 2,
-        tension: 0.4,
-        yAxisID: 'y'
-      },
-      {
-        label: 'Msgs/min',
-        data: chartMsgs,
-        borderColor: '#00e5a0',
-        backgroundColor: 'rgba(0,229,160,0.05)',
-        borderWidth: 1.5,
-        pointRadius: 2,
-        tension: 0.4,
-        yAxisID: 'y1'
-      }
-    ]
-  },
-  options: {
-    responsive: true,
-    maintainAspectRatio: false,
-    animation: { duration: 300 },
-    plugins: { legend: { display: false } },
-    scales: {
-      x: { display: false },
-      y: {
-        display: true,
-        position: 'left',
-        grid: { color: '#1e1e1e' },
-        ticks: { color: '#555', font: { size: 9 }, maxTicksLimit: 4 }
-      },
-      y1: {
-        display: true,
-        position: 'right',
-        grid: { drawOnChartArea: false },
-        ticks: { color: '#555', font: { size: 9 }, maxTicksLimit: 4 }
-      }
-    }
-  }
-});
-
-function setInterval(el, s) {
-  document.querySelectorAll('.int-opt').forEach(o => o.classList.remove('sel'));
-  el.classList.add('sel');
-  intervalMs = s * 1000;
-}
-
-function extractVideoId(url) {
   try {
-    const u = new URL(url);
-    return u.searchParams.get('v') || u.pathname.split('/').pop().split('?')[0];
-  } catch { return null; }
-}
+    const videoId = extractVideoId(videoUrl);
 
-function toggleMonitor() {
-  isRunning ? stopMonitor() : startMonitor();
-}
+    // Get live chat ID
+    const videoRes = await fetch(`https://www.googleapis.com/youtube/v3/videos?part=liveStreamingDetails,snippet&id=${videoId}&key=${YT_KEY}`);
+    const videoData = await videoRes.json();
+    const video = videoData.items?.[0];
+    if (!video) throw new Error('Video no encontrado');
 
-function startMonitor() {
-  const url = document.getElementById('live-url').value.trim();
-  if (!url) return alert('Ingresá la URL del live.');
-  isRunning = true;
-  cycles = 0;
-  prevMsgCount = 0;
-  document.getElementById('start-btn').textContent = 'Detener monitoreo ■';
-  document.getElementById('start-btn').classList.add('active');
-  document.getElementById('badge').className = 'badge on';
-  document.getElementById('badge-text').textContent = 'EN VIVO';
-  document.getElementById('tips-list').innerHTML = '';
-  const id = extractVideoId(url);
-  runCycle(id);
-  timer = window.setInterval(() => runCycle(id), intervalMs);
-}
+    const chatId = video.liveStreamingDetails?.activeLiveChatId;
+    if (!chatId) throw new Error('No hay chat en vivo activo para este video');
 
-function stopMonitor() {
-  window.clearInterval(timer);
-  isRunning = false;
-  document.getElementById('start-btn').textContent = 'Iniciar monitoreo →';
-  document.getElementById('start-btn').classList.remove('active');
-  document.getElementById('badge').className = 'badge off';
-  document.getElementById('badge-text').textContent = 'INACTIVO';
-}
+    // Get recent chat messages
+    const chatRes = await fetch(`https://www.googleapis.com/youtube/v3/liveChat/messages?liveChatId=${chatId}&part=snippet,authorDetails&maxResults=200&key=${YT_KEY}`);
+    const chatData = await chatRes.json();
+    const messages = chatData.items?.map(m => m.snippet.displayMessage).filter(Boolean) || [];
 
-async function runCycle(videoId) {
-  const transcript = document.getElementById('transcript').value.trim();
-  try {
-    const res = await fetch(API_BASE + '/api/live', {
+    if (messages.length === 0) throw new Error('No hay mensajes en el chat aún');
+
+    // Analyze with Claude
+    const claudeRes = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ videoId, transcript, previousMsgCount: prevMsgCount })
+      headers: { 'Content-Type': 'application/json', 'x-api-key': ANT_KEY, 'anthropic-version': '2023-06-01' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 500,
+        system: `Sos un coach experto en entretenimiento en vivo. Analizás el chat de YouTube en tiempo real y dás recomendaciones cortas y accionables al conductor y al productor del show. 
+        
+        Tus tips para el conductor deben ser breves (máx 15 palabras), en segunda persona informal, amigables, no directivos.
+        Tus tips para el productor pueden tener más contexto (máx 30 palabras) e incluir datos si los hay.
+        
+        Respondé SIEMPRE en JSON con este formato exacto:
+        {
+          "conductor": "tip corto para el conductor",
+          "productor": "tip con contexto para el productor",
+          "temas": ["tema1", "tema2", "tema3"],
+          "intensidad": "alta|media|baja"
+        }`,
+        messages: [{
+          role: 'user',
+          content: `Analizá estos ${messages.length} mensajes del chat en vivo:\n\n${messages.slice(-100).join('\n')}\n\nNotas del productor: ${notes || 'ninguna'}\n\nDá una recomendación accionable ahora mismo.`
+        }]
+      })
     });
-    const d = await res.json();
-    cycles++;
 
-    // Update metrics
-    const viewerDelta = d.viewerCount - prevViewers;
-    const msgDelta = d.msgCount - prevMsgCount;
-
-    document.getElementById('m-viewers').textContent = d.viewerCount > 0 ? d.viewerCount.toLocaleString() : '—';
-    document.getElementById('m-msgs').textContent = d.msgCount;
-    document.getElementById('m-mpm').textContent = d.msgsPerMin;
-    document.getElementById('m-cycles').textContent = cycles;
-
-    if (prevViewers > 0) {
-      const vd = document.getElementById('m-viewers-d');
-      vd.textContent = (viewerDelta >= 0 ? '+' : '') + viewerDelta;
-      vd.className = 'metric-delta ' + (viewerDelta >= 0 ? 'up' : 'down');
-    }
-    if (prevMsgCount > 0) {
-      const md = document.getElementById('m-msgs-d');
-      md.textContent = '+' + msgDelta + ' nuevos';
-      md.className = 'metric-delta up';
+    const claudeData = await claudeRes.json();
+    const text = claudeData.content?.[0]?.text || '{}';
+    
+    let result;
+    try {
+      result = JSON.parse(text);
+    } catch {
+      const match = text.match(/\{[\s\S]*\}/);
+      result = match ? JSON.parse(match[0]) : { conductor: text, productor: text, temas: [], intensidad: 'media' };
     }
 
-    prevViewers = d.viewerCount;
-    prevMsgCount = d.msgCount;
+    res.status(200).json({ 
+      ...result, 
+      mensajesAnalizados: messages.length,
+      showTitle: video.snippet?.title || 'Show en vivo'
+    });
 
-    // Update chart
-    const now = new Date().toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-    chartLabels.push(now);
-    chartViewers.push(d.viewerCount || 0);
-    chartMsgs.push(d.msgsPerMin || 0);
-    if (chartLabels.length > 20) { chartLabels.shift(); chartViewers.shift(); chartMsgs.shift(); }
-    chart.update();
-
-    // Add tip
-    addTip(d);
-
-    // Update topics
-    if (d.temas_sugeridos?.length) updateTopics(d.temas_sugeridos);
-
-  } catch(e) {
-    addTip({ tag: 'ALERTA', tip: 'Error de conexión con el servidor.', razon_hype: '' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
   }
 }
-
-function addTip(d) {
-  const list = document.getElementById('tips-list');
-  const now = new Date().toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-  const item = document.createElement('div');
-  item.className = 'tip-item';
-  item.innerHTML = `
-    <div class="tip-time">${now}</div>
-    <div class="tip-text">${d.tip || ''}</div>
-    ${d.razon_hype ? `<div class="tip-razon">${d.razon_hype}</div>` : ''}
-    <span class="tag ${d.tag || 'TEMA'}">${d.tag || 'TEMA'}</span>
-  `;
-  list.insertBefore(item, list.firstChild);
-}
-
-function updateTopics(topics) {
-  allTopics = topics;
-  const grid = document.getElementById('topics-grid');
-  grid.innerHTML = '';
-  topics.forEach((t, i) => {
-    const width = 100 - (i * 20);
-    const card = document.createElement('div');
-    card.className = 'topic-card' + (i === 0 ? ' hot' : '');
-    card.innerHTML = `
-      <div class="topic-num">TEMÁTICA ${String(i+1).padStart(2,'0')}</div>
-      <div class="topic-text">${t}</div>
-      <div class="topic-bar"><div class="topic-fill" style="width:${width}%"></div></div>
-    `;
-    grid.appendChild(card);
-  });
-}
-</script>
-</body>
-</html>
